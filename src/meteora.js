@@ -10,6 +10,8 @@ import { getConnection, getWallet } from "./wallet.js";
 
 let _DLMM = null;
 const poolCache = new Map();
+let openPositionsCache = null;
+let openPositionsCacheAt = 0;
 
 async function getDLMM() {
   if (!_DLMM) {
@@ -32,10 +34,20 @@ async function getPool(poolAddress) {
 export async function getOpenPositions() {
   const walletAddress = getWallet().publicKey.toString();
   const portfolioUrl = `https://dlmm.datapi.meteora.ag/portfolio/open?user=${walletAddress}`;
-  const portfolio = await fetchJsonWithRetry(portfolioUrl, {
-    label: "Meteora portfolio/open",
-    retries: 3,
-  });
+  let portfolio;
+  try {
+    portfolio = await fetchJsonWithRetry(portfolioUrl, {
+      label: "Meteora portfolio/open",
+      retries: 3,
+    });
+  } catch (error) {
+    if (openPositionsCache?.length) {
+      const ageSec = Math.max(1, Math.round((Date.now() - openPositionsCacheAt) / 1000));
+      log("warn", `Using cached open positions (${openPositionsCache.length}) after portfolio/open failure; cache age ${ageSec}s`);
+      return openPositionsCache;
+    }
+    throw error;
+  }
   const pools = portfolio.pools || [];
   const pnlMaps = await Promise.all(
     pools.map(async (pool) => {
@@ -78,6 +90,8 @@ export async function getOpenPositions() {
     }
   }
 
+  openPositionsCache = result;
+  openPositionsCacheAt = Date.now();
   return result;
 }
 
