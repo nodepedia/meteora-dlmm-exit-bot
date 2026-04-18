@@ -138,6 +138,7 @@ WALLET_PRIVATE_KEY=
 RPC_URL=
 HELIUS_API_KEY=
 DRY_RUN=true
+TIMEZONE=Asia/Jakarta
 ```
 
 Untuk notifikasi Telegram, isi juga:
@@ -264,6 +265,7 @@ Catatan:
 - `RPC_URL` dipakai untuk eksekusi transaksi close
 - `HELIUS_API_KEY` dipakai untuk cek balance token hasil close
 - `DRY_RUN=true` artinya bot hanya simulasi, tidak mengirim transaksi live
+- `TIMEZONE=Asia/Jakarta` membuat log tampil sesuai GMT+7
 - `TELEGRAM_BOT_TOKEN` dan `TELEGRAM_CHAT_ID` dipakai untuk notifikasi Telegram
 
 ### 5a. Telegram notifications

@@ -26,6 +26,7 @@ export const config = {
   heliusApiKey: required("HELIUS_API_KEY"),
   dryRun: toBool(process.env.DRY_RUN, true),
   logLevel: process.env.LOG_LEVEL || "info",
+  timezone: process.env.TIMEZONE || "Asia/Jakarta",
   pollIntervalMinutes: toNum(process.env.POLL_INTERVAL_MINUTES, 5),
   timeframe: process.env.TIMEFRAME || "1H",
   candleSource: process.env.CANDLE_SOURCE || "meteora",
