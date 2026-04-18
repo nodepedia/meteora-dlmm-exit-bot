@@ -3,6 +3,7 @@ import { fetchJsonWithRetry } from "./net.js";
 
 const METEORA_OHLCV_BASE = "https://dlmm.datapi.meteora.ag";
 const candleCache = new Map();
+const CANDLE_BUFFER = 10;
 
 function formatTimeframe(timeframe) {
   const normalized = String(timeframe || "1H").trim().toLowerCase();
@@ -13,45 +14,63 @@ function formatTimeframe(timeframe) {
   return normalized;
 }
 
-function resolveLookbackSeconds(timeframe) {
+function getMinimumCandlesRequired(indicatorConfig) {
+  const bbNeed = indicatorConfig.bbPeriod;
+  const rsiNeed = indicatorConfig.rsiPeriod + 1;
+  const macdNeed = indicatorConfig.macdSlow + indicatorConfig.macdSignal;
+  return Math.max(bbNeed, rsiNeed, macdNeed);
+}
+
+function resolveTimeframeSeconds(timeframe) {
   switch (timeframe) {
     case "5m":
-      return 2 * 24 * 60 * 60;
+      return 5 * 60;
     case "30m":
-      return 5 * 24 * 60 * 60;
+      return 30 * 60;
     case "1h":
-      return 7 * 24 * 60 * 60;
+      return 60 * 60;
     case "2h":
-      return 10 * 24 * 60 * 60;
+      return 2 * 60 * 60;
     case "4h":
-      return 21 * 24 * 60 * 60;
+      return 4 * 60 * 60;
     case "12h":
-      return 60 * 24 * 60 * 60;
+      return 12 * 60 * 60;
     case "24h":
-      return 120 * 24 * 60 * 60;
+      return 24 * 60 * 60;
     default:
-      return 7 * 24 * 60 * 60;
+      return 60 * 60;
   }
 }
 
+function resolveLookbackSeconds(timeframe) {
+  const minCandles = getMinimumCandlesRequired(config.indicators);
+  const targetCandles = minCandles + CANDLE_BUFFER;
+  return targetCandles * resolveTimeframeSeconds(timeframe);
+}
+
 function resolveChunkSeconds(timeframe) {
+  const timeframeSeconds = resolveTimeframeSeconds(timeframe);
+  const minCandles = getMinimumCandlesRequired(config.indicators);
+  const targetCandles = minCandles + CANDLE_BUFFER;
+  const targetSpan = targetCandles * timeframeSeconds;
+
   switch (timeframe) {
     case "5m":
-      return 12 * 60 * 60;
+      return Math.min(targetSpan, 8 * 60 * 60);
     case "30m":
-      return 2 * 24 * 60 * 60;
+      return Math.min(targetSpan, 36 * 60 * 60);
     case "1h":
-      return 2 * 24 * 60 * 60;
+      return Math.min(targetSpan, 36 * 60 * 60);
     case "2h":
-      return 4 * 24 * 60 * 60;
+      return Math.min(targetSpan, 3 * 24 * 60 * 60);
     case "4h":
-      return 7 * 24 * 60 * 60;
+      return Math.min(targetSpan, 5 * 24 * 60 * 60);
     case "12h":
-      return 21 * 24 * 60 * 60;
+      return Math.min(targetSpan, 14 * 24 * 60 * 60);
     case "24h":
-      return 45 * 24 * 60 * 60;
+      return Math.min(targetSpan, 30 * 24 * 60 * 60);
     default:
-      return 2 * 24 * 60 * 60;
+      return Math.min(targetSpan, 36 * 60 * 60);
   }
 }
 
@@ -132,14 +151,17 @@ async function getMeteoraPoolCandles(poolAddress) {
 
   const merged = mergeCandles(fetched);
   if (merged.length > 0) {
+    const minCandles = getMinimumCandlesRequired(config.indicators);
+    const targetCandles = minCandles + CANDLE_BUFFER;
+    const trimmed = merged.length > targetCandles ? merged.slice(-targetCandles) : merged;
     candleCache.set(poolAddress, {
-      candles: merged,
+      candles: trimmed,
       cachedAt: Date.now(),
       partial: successCount < chunks.length,
     });
     return {
       source: successCount < chunks.length ? "meteora-partial" : "meteora",
-      candles: merged,
+      candles: trimmed,
       partial: successCount < chunks.length,
     };
   }
