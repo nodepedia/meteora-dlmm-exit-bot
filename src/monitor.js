@@ -3,7 +3,7 @@ import { getPoolCandles } from "./chart.js";
 import { log } from "./logger.js";
 import { closePosition, getOpenPositions } from "./meteora.js";
 import { evaluateExitSignal } from "./strategy.js";
-import { sendTelegramMessage } from "./telegram.js";
+import { formatTelegramMessage, sendTelegramMessage } from "./telegram.js";
 import { getWalletBalances, swapToken } from "./wallet.js";
 
 function sleep(ms) {
@@ -35,7 +35,11 @@ async function processPosition(position) {
     log("info", `${position.pair}: hold (${decision.reason})`);
     if (config.telegram.notifyHold) {
       await sendTelegramMessage(
-        `HOLD\nPair: ${position.pair}\nPosition: ${position.position}\nReason: ${decision.reason}`,
+        formatTelegramMessage("HOLD", [
+          { label: "Pair", value: position.pair },
+          { label: "Position", value: position.position, code: true },
+          { label: "Reason", value: decision.reason },
+        ], "Bot checked the latest candle and keeps the position open."),
         { dedupeKey: `hold:${position.position}:${decision.reason}`, dedupeMs: 30 * 60 * 1000 }
       );
     }
@@ -44,7 +48,11 @@ async function processPosition(position) {
 
   log("info", `${position.pair}: exit triggered (${decision.reason})`);
   await sendTelegramMessage(
-    `EXIT TRIGGERED\nPair: ${position.pair}\nPosition: ${position.position}\nReason: ${decision.reason}`,
+    formatTelegramMessage("EXIT TRIGGERED", [
+      { label: "Pair", value: position.pair },
+      { label: "Position", value: position.position, code: true },
+      { label: "Reason", value: decision.reason },
+    ], "Exit signal confirmed. Bot is executing close flow."),
     { dedupeKey: `exit-trigger:${position.position}:${decision.reason}`, dedupeMs: 15 * 60 * 1000 }
   );
   const closeResult = await closePosition({
@@ -53,7 +61,12 @@ async function processPosition(position) {
   });
 
   await sendTelegramMessage(
-    `CLOSE ${closeResult?.success ? "SUCCESS" : "RESULT"}\nPair: ${position.pair}\nPosition: ${position.position}\nReason: ${decision.reason}\nTxs: ${closeResult?.txs?.join(", ") || "-"}`,
+    formatTelegramMessage(`CLOSE ${closeResult?.success ? "SUCCESS" : "RESULT"}`, [
+      { label: "Pair", value: position.pair },
+      { label: "Position", value: position.position, code: true },
+      { label: "Reason", value: decision.reason },
+      { label: "Txs", value: closeResult?.txs?.join(", ") || "-", code: true },
+    ]),
     { dedupeKey: `close:${position.position}:${closeResult?.txs?.[0] || decision.reason}`, dedupeMs: 24 * 60 * 60 * 1000 }
   );
 
@@ -62,7 +75,11 @@ async function processPosition(position) {
     swapResult = await maybeSwapToSol(position.baseMint);
     if (swapResult?.success || swapResult?.dryRun) {
       await sendTelegramMessage(
-        `SWAP TO SOL ${swapResult?.dryRun ? "DRY RUN" : "SUCCESS"}\nPair: ${position.pair}\nMint: ${position.baseMint}\nTx: ${swapResult?.tx || "-"}`,
+        formatTelegramMessage(`SWAP TO SOL ${swapResult?.dryRun ? "DRY RUN" : "SUCCESS"}`, [
+          { label: "Pair", value: position.pair },
+          { label: "Mint", value: position.baseMint, code: true },
+          { label: "Tx", value: swapResult?.tx || "-", code: true },
+        ]),
         { dedupeKey: `swap:${position.position}:${swapResult?.tx || "dry-run"}`, dedupeMs: 24 * 60 * 60 * 1000 }
       );
     }
@@ -89,7 +106,11 @@ export async function runMonitorLoop() {
             log("error", `Failed processing ${position.position}: ${error.message}`);
             if (config.telegram.notifyErrors) {
               await sendTelegramMessage(
-                `ERROR\nScope: processPosition\nPosition: ${position.position}\nMessage: ${error.message}`,
+                formatTelegramMessage("ERROR", [
+                  { label: "Scope", value: "processPosition" },
+                  { label: "Position", value: position.position, code: true },
+                  { label: "Message", value: error.message },
+                ]),
                 { dedupeKey: `proc-error:${position.position}:${error.message}`, dedupeMs: 10 * 60 * 1000 }
               );
             }
@@ -100,7 +121,10 @@ export async function runMonitorLoop() {
       log("error", `Monitor loop failed: ${error.message}`);
       if (config.telegram.notifyErrors) {
         await sendTelegramMessage(
-          `ERROR\nScope: monitorLoop\nMessage: ${error.message}`,
+          formatTelegramMessage("ERROR", [
+            { label: "Scope", value: "monitorLoop" },
+            { label: "Message", value: error.message },
+          ]),
           { dedupeKey: `loop-error:${error.message}`, dedupeMs: 10 * 60 * 1000 }
         );
       }
