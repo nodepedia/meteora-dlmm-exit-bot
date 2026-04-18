@@ -1,4 +1,5 @@
 import { config } from "./config.js";
+import { fetchJsonWithRetry } from "./net.js";
 
 const METEORA_OHLCV_BASE = "https://dlmm.datapi.meteora.ag";
 const candleCache = new Map();
@@ -70,12 +71,11 @@ function normalizeCandles(candles) {
 
 async function fetchWindow(poolAddress, timeframe, startTime, endTime) {
   const url = `${METEORA_OHLCV_BASE}/pools/${encodeURIComponent(poolAddress)}/ohlcv?timeframe=${encodeURIComponent(timeframe)}&start_time=${startTime}&end_time=${endTime}`;
-  const res = await fetch(url);
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`Meteora OHLCV request failed: ${res.status} ${body}`);
-  }
-  const data = await res.json();
+  const data = await fetchJsonWithRetry(url, {
+    label: `Meteora OHLCV ${poolAddress.slice(0, 8)} [${startTime}-${endTime}]`,
+    retries: 3,
+    retryDelayMs: 900,
+  });
   return normalizeCandles(data.data || []);
 }
 

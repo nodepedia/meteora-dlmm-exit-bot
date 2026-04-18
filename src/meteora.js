@@ -5,6 +5,7 @@ import {
 import BN from "bn.js";
 import { config } from "./config.js";
 import { log } from "./logger.js";
+import { fetchJsonWithRetry } from "./net.js";
 import { getConnection, getWallet } from "./wallet.js";
 
 let _DLMM = null;
@@ -31,26 +32,30 @@ async function getPool(poolAddress) {
 export async function getOpenPositions() {
   const walletAddress = getWallet().publicKey.toString();
   const portfolioUrl = `https://dlmm.datapi.meteora.ag/portfolio/open?user=${walletAddress}`;
-  const res = await fetch(portfolioUrl);
-  if (!res.ok) {
-    throw new Error(`Meteora portfolio API failed: ${res.status} ${await res.text()}`);
-  }
-
-  const portfolio = await res.json();
+  const portfolio = await fetchJsonWithRetry(portfolioUrl, {
+    label: "Meteora portfolio/open",
+    retries: 3,
+  });
   const pools = portfolio.pools || [];
   const pnlMaps = await Promise.all(
     pools.map(async (pool) => {
       const url = `https://dlmm.datapi.meteora.ag/positions/${pool.poolAddress}/pnl?user=${walletAddress}&status=open&pageSize=100&page=1`;
-      const poolRes = await fetch(url);
-      if (!poolRes.ok) return {};
-      const data = await poolRes.json();
-      const positions = data.positions || data.data || [];
-      return Object.fromEntries(
-        positions.map((p) => [
-          p.positionAddress || p.address || p.position,
-          p,
-        ])
-      );
+      try {
+        const data = await fetchJsonWithRetry(url, {
+          label: `Meteora positions/pnl ${pool.poolAddress.slice(0, 8)}`,
+          retries: 2,
+        });
+        const positions = data.positions || data.data || [];
+        return Object.fromEntries(
+          positions.map((p) => [
+            p.positionAddress || p.address || p.position,
+            p,
+          ])
+        );
+      } catch (error) {
+        log("warn", `Skipping pnl enrichment for pool ${pool.poolAddress.slice(0, 8)}: ${error.message}`);
+        return {};
+      }
     })
   );
 
