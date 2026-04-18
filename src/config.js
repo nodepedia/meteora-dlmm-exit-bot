@@ -42,6 +42,10 @@ export const config = {
     macdSlow: toNum(process.env.MACD_SLOW, 26),
     macdSignal: toNum(process.env.MACD_SIGNAL, 9),
   },
+  chart: {
+    fallbackToJupiter: toBool(process.env.CHART_FALLBACK_TO_JUPITER, true),
+    jupiterCandleUrlTemplate: process.env.JUPITER_CANDLE_URL_TEMPLATE || "",
+  },
   tokens: {
     SOL: "So11111111111111111111111111111111111111112",
   },

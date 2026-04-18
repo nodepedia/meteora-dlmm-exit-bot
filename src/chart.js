@@ -46,7 +46,27 @@ function buildLookbackAttempts(preferredSeconds) {
   return [...new Set(attempts.filter((value) => Number.isFinite(value) && value > 0))];
 }
 
-export async function getPoolCandles({ poolAddress }) {
+function normalizeJupiterInterval(timeframe) {
+  const value = String(timeframe || "1H").trim().toUpperCase();
+  if (/^\d+[MHDW]$/.test(value)) return value;
+  return value === "1H" ? "1H" : value;
+}
+
+function normalizeCandles(candles) {
+  return candles
+    .map((candle) => ({
+      time: candle.timestamp ?? candle.time ?? candle.t,
+      open: Number(candle.open ?? candle.o),
+      high: Number(candle.high ?? candle.h),
+      low: Number(candle.low ?? candle.l),
+      close: Number(candle.close ?? candle.c),
+      volume: Number(candle.volume ?? candle.v ?? 0),
+    }))
+    .filter((c) => Number.isFinite(c.close) && Number.isFinite(c.high) && Number.isFinite(c.time))
+    .sort((a, b) => a.time - b.time);
+}
+
+async function getMeteoraPoolCandles(poolAddress) {
   if (config.candleSource !== "meteora") {
     throw new Error(`Unsupported candle source: ${config.candleSource}`);
   }
@@ -72,19 +92,55 @@ export async function getPoolCandles({ poolAddress }) {
     }
 
     const data = await res.json();
-    const candles = data.data || [];
-
-    return candles.map((candle) => ({
-      time: candle.timestamp,
-      open: Number(candle.open),
-      high: Number(candle.high),
-      low: Number(candle.low),
-      close: Number(candle.close),
-      volume: Number(candle.volume || 0),
-    }))
-      .filter((c) => Number.isFinite(c.close) && Number.isFinite(c.high))
-      .sort((a, b) => a.time - b.time);
+    return {
+      source: "meteora",
+      candles: normalizeCandles(data.data || []),
+    };
   }
 
   throw new Error(lastError || "Meteora OHLCV request failed after all lookback attempts");
+}
+
+async function getJupiterFallbackCandles(baseMint) {
+  if (!config.chart.fallbackToJupiter) {
+    throw new Error("Jupiter chart fallback is disabled");
+  }
+  if (!config.chart.jupiterCandleUrlTemplate) {
+    throw new Error("JUPITER_CANDLE_URL_TEMPLATE is not set");
+  }
+
+  const url = config.chart.jupiterCandleUrlTemplate
+    .replaceAll("{mint}", encodeURIComponent(baseMint))
+    .replaceAll("{interval}", encodeURIComponent(normalizeJupiterInterval(config.timeframe)))
+    .replaceAll("{limit}", encodeURIComponent("120"));
+
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error(`Jupiter candle fallback failed: ${res.status} ${await res.text()}`);
+  }
+
+  const data = await res.json();
+  return {
+    source: "jupiter",
+    candles: normalizeCandles(data.candles || data.data || data.items || []),
+  };
+}
+
+export async function getPoolCandles({ poolAddress, baseMint }) {
+  try {
+    return await getMeteoraPoolCandles(poolAddress);
+  } catch (meteoraError) {
+    if (!config.chart.fallbackToJupiter) {
+      throw meteoraError;
+    }
+    if (!baseMint) {
+      throw meteoraError;
+    }
+
+    try {
+      return await getJupiterFallbackCandles(baseMint);
+    } catch (jupiterError) {
+      throw new Error(`Meteora failed (${meteoraError.message}); Jupiter fallback failed (${jupiterError.message})`);
+    }
+  }
 }

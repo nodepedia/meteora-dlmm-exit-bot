@@ -26,9 +26,9 @@ async function maybeSwapToSol(baseMint) {
 async function processPosition(position) {
   log("info", `Evaluating ${position.pair} (${position.position})`);
 
-  const candles = await getPoolCandles({ poolAddress: position.pool });
-  log("info", `${position.pair}: received ${candles.length} candle(s) from Meteora OHLCV`);
-  const decision = evaluateExitSignal(candles, config.indicators);
+  const chart = await getPoolCandles({ poolAddress: position.pool, baseMint: position.baseMint });
+  log("info", `${position.pair}: received ${chart.candles.length} candle(s) from ${chart.source}`);
+  const decision = evaluateExitSignal(chart.candles, config.indicators);
 
   if (!decision.exit) {
     log("info", `${position.pair}: hold (${decision.reason})`);

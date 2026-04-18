@@ -77,6 +77,7 @@ Supaya implementasi tidak ambigu, bot akan memakai definisi berikut sebagai defa
 
 - **Timeframe**: `1H`
 - **Sumber candle**: Meteora OHLCV per pool
+- **Fallback candle**: Jupiter chart jika Meteora gagal
 - **Touch upper band**: `high >= upper band`
 - **MACD green bar pertama**: histogram pertama yang berubah dari merah ke hijau
 - **Exit size**: close full position
@@ -129,6 +130,7 @@ MACD_GREEN_RULE=first_histogram_red_to_green
 EXIT_CLOSE_FULL=true
 EXIT_SWAP_TO_SOL=true
 POLL_INTERVAL_MINUTES=5
+CHART_FALLBACK_TO_JUPITER=true
 ```
 
 Selain itu, bot nantinya juga akan membutuhkan konfigurasi seperti:
@@ -410,6 +412,7 @@ standalone-exit-bot/
 
 - `config.js`: load dan validasi env
 - `chart.js`: ambil candle OHLCV dari Meteora berdasarkan pool
+  fallback ke Jupiter chart jika Meteora gagal
 - `indicators.js`: hitung Bollinger Bands, RSI(2), dan MACD
 - `meteora.js`: cek posisi DLMM dan close position
 - `wallet.js`: cek token balance dan swap ke SOL
@@ -494,4 +497,5 @@ Catatan penting:
 
 - adapter chart Meteora sudah dipasang
 - source candle sekarang membaca OHLCV pool langsung dari Meteora
+- fallback ke Jupiter bisa diaktifkan lewat `.env`
 - swap hasil close ke SOL tetap memakai Jupiter swap API
