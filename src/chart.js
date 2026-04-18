@@ -1,6 +1,7 @@
 import { config } from "./config.js";
 
 const METEORA_OHLCV_BASE = "https://dlmm.datapi.meteora.ag";
+const candleCache = new Map();
 
 function formatTimeframe(timeframe) {
   const normalized = String(timeframe || "1H").trim().toLowerCase();
@@ -32,24 +33,25 @@ function resolveLookbackSeconds(timeframe) {
   }
 }
 
-function buildLookbackAttempts(preferredSeconds) {
-  const attempts = [
-    preferredSeconds,
-    Math.floor(preferredSeconds / 2),
-    Math.floor(preferredSeconds / 4),
-    3 * 24 * 60 * 60,
-    2 * 24 * 60 * 60,
-    36 * 60 * 60,
-    24 * 60 * 60,
-  ];
-
-  return [...new Set(attempts.filter((value) => Number.isFinite(value) && value > 0))];
-}
-
-function normalizeJupiterInterval(timeframe) {
-  const value = String(timeframe || "1H").trim().toUpperCase();
-  if (/^\d+[MHDW]$/.test(value)) return value;
-  return value === "1H" ? "1H" : value;
+function resolveChunkSeconds(timeframe) {
+  switch (timeframe) {
+    case "5m":
+      return 12 * 60 * 60;
+    case "30m":
+      return 2 * 24 * 60 * 60;
+    case "1h":
+      return 2 * 24 * 60 * 60;
+    case "2h":
+      return 4 * 24 * 60 * 60;
+    case "4h":
+      return 7 * 24 * 60 * 60;
+    case "12h":
+      return 21 * 24 * 60 * 60;
+    case "24h":
+      return 45 * 24 * 60 * 60;
+    default:
+      return 2 * 24 * 60 * 60;
+  }
 }
 
 function normalizeCandles(candles) {
@@ -66,81 +68,98 @@ function normalizeCandles(candles) {
     .sort((a, b) => a.time - b.time);
 }
 
-async function getMeteoraPoolCandles(poolAddress) {
-  if (config.candleSource !== "meteora") {
-    throw new Error(`Unsupported candle source: ${config.candleSource}`);
+async function fetchWindow(poolAddress, timeframe, startTime, endTime) {
+  const url = `${METEORA_OHLCV_BASE}/pools/${encodeURIComponent(poolAddress)}/ohlcv?timeframe=${encodeURIComponent(timeframe)}&start_time=${startTime}&end_time=${endTime}`;
+  const res = await fetch(url);
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Meteora OHLCV request failed: ${res.status} ${body}`);
   }
+  const data = await res.json();
+  return normalizeCandles(data.data || []);
+}
 
+function mergeCandles(chunks) {
+  const byTime = new Map();
+  for (const chunk of chunks) {
+    for (const candle of chunk) {
+      byTime.set(candle.time, candle);
+    }
+  }
+  return [...byTime.values()].sort((a, b) => a.time - b.time);
+}
+
+async function getMeteoraPoolCandles(poolAddress) {
   const timeframe = formatTimeframe(config.timeframe);
   const endTime = Math.floor(Date.now() / 1000);
-  const attempts = buildLookbackAttempts(resolveLookbackSeconds(timeframe));
+  const lookbackSeconds = resolveLookbackSeconds(timeframe);
+  const chunkSeconds = resolveChunkSeconds(timeframe);
+  const startTime = endTime - lookbackSeconds;
 
+  const chunks = [];
+  let cursor = startTime;
+  while (cursor < endTime) {
+    const next = Math.min(cursor + chunkSeconds, endTime);
+    chunks.push([cursor, next]);
+    cursor = next;
+  }
+
+  const fetched = [];
+  let successCount = 0;
   let lastError = null;
-  for (const lookbackSeconds of attempts) {
-    const startTime = endTime - lookbackSeconds;
-    const url = `${METEORA_OHLCV_BASE}/pools/${encodeURIComponent(poolAddress)}/ohlcv?timeframe=${encodeURIComponent(timeframe)}&start_time=${startTime}&end_time=${endTime}`;
 
-    const res = await fetch(url);
-    if (!res.ok) {
-      const body = await res.text();
-      lastError = `Meteora OHLCV request failed: ${res.status} ${body}`;
-
-      if (res.status === 400 && /time range too large/i.test(body)) {
+  for (const [from, to] of chunks) {
+    try {
+      const candles = await fetchWindow(poolAddress, timeframe, from, to);
+      if (candles.length > 0) {
+        fetched.push(candles);
+      }
+      successCount++;
+    } catch (error) {
+      lastError = error;
+      const span = to - from;
+      if (/time range too large/i.test(error.message) && span > 6 * 60 * 60) {
+        const mid = Math.floor((from + to) / 2);
+        const left = await fetchWindow(poolAddress, timeframe, from, mid).catch(() => []);
+        const right = await fetchWindow(poolAddress, timeframe, mid, to).catch(() => []);
+        if (left.length > 0) fetched.push(left);
+        if (right.length > 0) fetched.push(right);
+        successCount++;
         continue;
       }
-      throw new Error(lastError);
     }
+  }
 
-    const data = await res.json();
+  const merged = mergeCandles(fetched);
+  if (merged.length > 0) {
+    candleCache.set(poolAddress, {
+      candles: merged,
+      cachedAt: Date.now(),
+      partial: successCount < chunks.length,
+    });
     return {
-      source: "meteora",
-      candles: normalizeCandles(data.data || []),
+      source: successCount < chunks.length ? "meteora-partial" : "meteora",
+      candles: merged,
+      partial: successCount < chunks.length,
     };
   }
 
-  throw new Error(lastError || "Meteora OHLCV request failed after all lookback attempts");
+  const cached = candleCache.get(poolAddress);
+  if (cached?.candles?.length) {
+    return {
+      source: "meteora-cache",
+      candles: cached.candles,
+      partial: true,
+      cachedAt: cached.cachedAt,
+    };
+  }
+
+  throw new Error(lastError?.message || "Meteora OHLCV request failed and no cache is available");
 }
 
-async function getJupiterFallbackCandles(baseMint) {
-  if (!config.chart.fallbackToJupiter) {
-    throw new Error("Jupiter chart fallback is disabled");
+export async function getPoolCandles({ poolAddress }) {
+  if (config.candleSource !== "meteora") {
+    throw new Error(`Unsupported candle source: ${config.candleSource}`);
   }
-  if (!config.chart.jupiterCandleUrlTemplate) {
-    throw new Error("JUPITER_CANDLE_URL_TEMPLATE is not set");
-  }
-
-  const url = config.chart.jupiterCandleUrlTemplate
-    .replaceAll("{mint}", encodeURIComponent(baseMint))
-    .replaceAll("{interval}", encodeURIComponent(normalizeJupiterInterval(config.timeframe)))
-    .replaceAll("{limit}", encodeURIComponent("120"));
-
-  const res = await fetch(url);
-  if (!res.ok) {
-    throw new Error(`Jupiter candle fallback failed: ${res.status} ${await res.text()}`);
-  }
-
-  const data = await res.json();
-  return {
-    source: "jupiter",
-    candles: normalizeCandles(data.candles || data.data || data.items || []),
-  };
-}
-
-export async function getPoolCandles({ poolAddress, baseMint }) {
-  try {
-    return await getMeteoraPoolCandles(poolAddress);
-  } catch (meteoraError) {
-    if (!config.chart.fallbackToJupiter) {
-      throw meteoraError;
-    }
-    if (!baseMint) {
-      throw meteoraError;
-    }
-
-    try {
-      return await getJupiterFallbackCandles(baseMint);
-    } catch (jupiterError) {
-      throw new Error(`Meteora failed (${meteoraError.message}); Jupiter fallback failed (${jupiterError.message})`);
-    }
-  }
+  return getMeteoraPoolCandles(poolAddress);
 }

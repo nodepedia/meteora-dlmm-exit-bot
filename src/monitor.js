@@ -26,7 +26,7 @@ async function maybeSwapToSol(baseMint) {
 async function processPosition(position) {
   log("info", `Evaluating ${position.pair} (${position.position})`);
 
-  const chart = await getPoolCandles({ poolAddress: position.pool, baseMint: position.baseMint });
+  const chart = await getPoolCandles({ poolAddress: position.pool });
   log("info", `${position.pair}: received ${chart.candles.length} candle(s) from ${chart.source}`);
   const decision = evaluateExitSignal(chart.candles, config.indicators);
 
