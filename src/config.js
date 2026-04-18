@@ -49,6 +49,8 @@ export const config = {
     notifyStartup: toBool(process.env.TELEGRAM_NOTIFY_STARTUP, true),
     notifyHold: toBool(process.env.TELEGRAM_NOTIFY_HOLD, false),
     notifyErrors: toBool(process.env.TELEGRAM_NOTIFY_ERRORS, true),
+    timeoutMs: toNum(process.env.TELEGRAM_TIMEOUT_MS, 15000),
+    retryCount: toNum(process.env.TELEGRAM_RETRY_COUNT, 1),
   },
   tokens: {
     SOL: "So11111111111111111111111111111111111111112",

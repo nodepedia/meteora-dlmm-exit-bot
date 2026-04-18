@@ -2,7 +2,10 @@ import { config } from "./config.js";
 import { log } from "./logger.js";
 
 const dedupeCache = new Map();
-const TELEGRAM_TIMEOUT_MS = 10000;
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 function isEnabled() {
   return !!(config.telegram.botToken && config.telegram.chatId);
@@ -19,40 +22,55 @@ export async function sendTelegramMessage(text, { dedupeKey = null, dedupeMs = 1
   }
 
   const url = `https://api.telegram.org/bot${config.telegram.botToken}/sendMessage`;
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), TELEGRAM_TIMEOUT_MS);
+  const attempts = Math.max(1, (config.telegram.retryCount ?? 1) + 1);
 
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        chat_id: config.telegram.chatId,
-        text,
-        disable_web_page_preview: true,
-      }),
-      signal: controller.signal,
-    });
-    clearTimeout(timeout);
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), config.telegram.timeoutMs);
 
-    if (!res.ok) {
-      const body = await res.text().catch(() => "");
-      log("warn", `Telegram send failed: ${res.status} ${body}`);
-      return { success: false, error: `Telegram send failed: ${res.status}` };
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          chat_id: config.telegram.chatId,
+          text,
+          disable_web_page_preview: true,
+        }),
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+
+      if (!res.ok) {
+        const body = await res.text().catch(() => "");
+        const reason = `Telegram send failed: ${res.status} ${body}`;
+        if (attempt < attempts) {
+          log("warn", `${reason}. Retrying ${attempt}/${attempts - 1}...`);
+          await sleep(1000 * attempt);
+          continue;
+        }
+        log("warn", reason);
+        return { success: false, error: reason };
+      }
+
+      if (dedupeKey) {
+        dedupeCache.set(dedupeKey, Date.now());
+      }
+
+      return { success: true };
+    } catch (error) {
+      const reason = error?.name === "AbortError"
+        ? `Telegram send timed out after ${config.telegram.timeoutMs}ms`
+        : `Telegram send failed: ${error.message}`;
+      if (attempt < attempts) {
+        log("warn", `${reason}. Retrying ${attempt}/${attempts - 1}...`);
+        await sleep(1000 * attempt);
+        continue;
+      }
+      log("warn", reason);
+      return { success: false, error: reason };
     }
-
-    if (dedupeKey) {
-      dedupeCache.set(dedupeKey, Date.now());
-    }
-
-    return { success: true };
-  } catch (error) {
-    const reason = error?.name === "AbortError"
-      ? `Telegram send timed out after ${TELEGRAM_TIMEOUT_MS}ms`
-      : `Telegram send failed: ${error.message}`;
-    log("warn", reason);
-    return { success: false, error: reason };
   }
 }
