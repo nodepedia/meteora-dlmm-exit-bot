@@ -140,6 +140,16 @@ HELIUS_API_KEY=
 DRY_RUN=true
 ```
 
+Untuk notifikasi Telegram, isi juga:
+
+```env
+TELEGRAM_BOT_TOKEN=
+TELEGRAM_CHAT_ID=
+TELEGRAM_NOTIFY_STARTUP=true
+TELEGRAM_NOTIFY_HOLD=false
+TELEGRAM_NOTIFY_ERRORS=true
+```
+
 ---
 
 ## Setup Guide
@@ -254,6 +264,19 @@ Catatan:
 - `RPC_URL` dipakai untuk eksekusi transaksi close
 - `HELIUS_API_KEY` dipakai untuk cek balance token hasil close
 - `DRY_RUN=true` artinya bot hanya simulasi, tidak mengirim transaksi live
+- `TELEGRAM_BOT_TOKEN` dan `TELEGRAM_CHAT_ID` dipakai untuk notifikasi Telegram
+
+### 5a. Telegram notifications
+
+Jika Telegram diisi, bot akan mengirim notifikasi untuk:
+
+- startup bot
+- exit triggered
+- close success
+- swap success
+- error penting
+
+Secara default, status `hold` tidak dikirim agar chat tidak spam.
 
 ### 6. Jalankan bot dalam mode dry run
 

@@ -42,6 +42,13 @@ export const config = {
     macdSlow: toNum(process.env.MACD_SLOW, 26),
     macdSignal: toNum(process.env.MACD_SIGNAL, 9),
   },
+  telegram: {
+    botToken: process.env.TELEGRAM_BOT_TOKEN || "",
+    chatId: process.env.TELEGRAM_CHAT_ID || "",
+    notifyStartup: toBool(process.env.TELEGRAM_NOTIFY_STARTUP, true),
+    notifyHold: toBool(process.env.TELEGRAM_NOTIFY_HOLD, false),
+    notifyErrors: toBool(process.env.TELEGRAM_NOTIFY_ERRORS, true),
+  },
   tokens: {
     SOL: "So11111111111111111111111111111111111111112",
   },
