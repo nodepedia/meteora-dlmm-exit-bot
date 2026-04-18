@@ -1,0 +1,23 @@
+{
+  "name": "dlmm-exit-bot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Standalone exit-only bot for Meteora DLMM positions on Solana",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "DRY_RUN=true node src/index.js",
+    "postinstall": "node scripts/patch-anchor.js"
+  },
+  "dependencies": {
+    "@meteora-ag/dlmm": "1.9.4",
+    "@solana/web3.js": "^1.95.0",
+    "bn.js": "^5.2.1",
+    "bs58": "^5.0.0",
+    "dotenv": "^17.3.1"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
