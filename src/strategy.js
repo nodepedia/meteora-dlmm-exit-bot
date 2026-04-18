@@ -1,8 +1,24 @@
 import { calculateBollingerBands, calculateMacd, calculateRsi } from "./indicators.js";
 
+function getMinimumCandlesRequired(indicatorConfig) {
+  const bbNeed = indicatorConfig.bbPeriod;
+  const rsiNeed = indicatorConfig.rsiPeriod + 1;
+  const macdNeed = indicatorConfig.macdSlow + indicatorConfig.macdSignal;
+  return Math.max(bbNeed, rsiNeed, macdNeed);
+}
+
 export function evaluateExitSignal(candles, indicatorConfig) {
   if (!Array.isArray(candles) || candles.length === 0) {
     return { exit: false, reason: "No candles" };
+  }
+
+  const minCandles = getMinimumCandlesRequired(indicatorConfig);
+  if (candles.length < minCandles) {
+    return {
+      exit: false,
+      reason: `Not enough candles: got ${candles.length}, need at least ${minCandles}`,
+      meta: { candlesReceived: candles.length, candlesRequired: minCandles },
+    };
   }
 
   const closes = candles.map((c) => Number(c.close));
@@ -18,7 +34,11 @@ export function evaluateExitSignal(candles, indicatorConfig) {
   );
 
   if (!bb || rsi == null || !macd || macd.histogram.length < 2) {
-    return { exit: false, reason: "Not enough data for indicators" };
+    return {
+      exit: false,
+      reason: `Indicator warmup incomplete despite ${candles.length} candles`,
+      meta: { candlesReceived: candles.length, candlesRequired: minCandles },
+    };
   }
 
   const touchedUpperBand = Number(latest.high) >= bb.upper;

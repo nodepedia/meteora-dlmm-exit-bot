@@ -11,13 +11,36 @@ function formatTimeframe(timeframe) {
   return normalized;
 }
 
+function resolveLookbackSeconds(timeframe) {
+  switch (timeframe) {
+    case "5m":
+      return 3 * 24 * 60 * 60;
+    case "30m":
+      return 10 * 24 * 60 * 60;
+    case "1h":
+      return 14 * 24 * 60 * 60;
+    case "2h":
+      return 21 * 24 * 60 * 60;
+    case "4h":
+      return 45 * 24 * 60 * 60;
+    case "12h":
+      return 120 * 24 * 60 * 60;
+    case "24h":
+      return 240 * 24 * 60 * 60;
+    default:
+      return 14 * 24 * 60 * 60;
+  }
+}
+
 export async function getPoolCandles({ poolAddress }) {
   if (config.candleSource !== "meteora") {
     throw new Error(`Unsupported candle source: ${config.candleSource}`);
   }
 
   const timeframe = formatTimeframe(config.timeframe);
-  const url = `${METEORA_OHLCV_BASE}/pools/${encodeURIComponent(poolAddress)}/ohlcv?timeframe=${encodeURIComponent(timeframe)}`;
+  const endTime = Math.floor(Date.now() / 1000);
+  const startTime = endTime - resolveLookbackSeconds(timeframe);
+  const url = `${METEORA_OHLCV_BASE}/pools/${encodeURIComponent(poolAddress)}/ohlcv?timeframe=${encodeURIComponent(timeframe)}&start_time=${startTime}&end_time=${endTime}`;
 
   const res = await fetch(url);
   if (!res.ok) {
@@ -34,5 +57,7 @@ export async function getPoolCandles({ poolAddress }) {
     low: Number(candle.low),
     close: Number(candle.close),
     volume: Number(candle.volume || 0),
-  })).filter((c) => Number.isFinite(c.close) && Number.isFinite(c.high));
+  }))
+    .filter((c) => Number.isFinite(c.close) && Number.isFinite(c.high))
+    .sort((a, b) => a.time - b.time);
 }

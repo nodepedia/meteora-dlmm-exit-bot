@@ -27,6 +27,7 @@ async function processPosition(position) {
   log("info", `Evaluating ${position.pair} (${position.position})`);
 
   const candles = await getPoolCandles({ poolAddress: position.pool });
+  log("info", `${position.pair}: received ${candles.length} candle(s) from Meteora OHLCV`);
   const decision = evaluateExitSignal(candles, config.indicators);
 
   if (!decision.exit) {
