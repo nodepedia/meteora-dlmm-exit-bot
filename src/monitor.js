@@ -3,11 +3,43 @@ import { getPoolCandles } from "./chart.js";
 import { log } from "./logger.js";
 import { closePosition, getOpenPositions } from "./meteora.js";
 import { evaluateExitSignal } from "./strategy.js";
-import { formatTelegramMessage, formatTelegramTableMessage, sendTelegramMessage } from "./telegram.js";
+import { formatTelegramMessage, formatTelegramReportMessage, sendTelegramMessage } from "./telegram.js";
 import { getWalletBalances, swapToken } from "./wallet.js";
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function formatLocalTime() {
+  return new Intl.DateTimeFormat("sv-SE", {
+    timeZone: config.timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).format(new Date());
+}
+
+function compactReason(reason) {
+  if (!reason) return "-";
+  if (/not enough candles/i.test(reason)) return "WARMUP";
+  if (/indicator warmup/i.test(reason)) return "WARMUP";
+  if (/exit conditions not met/i.test(reason)) return "WAIT";
+  if (/rsi/i.test(reason)) return "EXIT_RSI";
+  if (/macd/i.test(reason)) return "EXIT_MACD";
+  if (/stop loss/i.test(reason)) return "STOP";
+  return String(reason).slice(0, 12).toUpperCase();
+}
+
+function compactSource(source) {
+  if (!source) return "-";
+  if (source === "meteora") return "MTR";
+  if (source === "meteora-partial") return "MTR-P";
+  if (source === "meteora-cache") return "CACHE";
+  return String(source).slice(0, 6).toUpperCase();
 }
 
 async function maybeSwapToSol(baseMint) {
@@ -122,21 +154,27 @@ export async function runMonitorLoop() {
             .map((item) => [
               item.pair,
               item.action,
+              compactReason(item.reason),
               item.candles ?? "-",
-              item.source ?? "-",
-              item.reason ?? "-",
+              compactSource(item.source),
             ]);
 
           if (summaryRows.length > 0) {
+            const holdCount = cycleResults.filter((item) => item?.action === "HOLD").length;
+            const exitCount = cycleResults.filter((item) => item?.action === "EXIT").length;
             await sendTelegramMessage(
-              formatTelegramTableMessage(
-                "POSITION SUMMARY",
+              formatTelegramReportMessage(
+                "📊 DLMM POSITION REPORT",
                 [
-                  { header: "Pair", width: 14 },
-                  { header: "Status", width: 8 },
-                  { header: "Candles", width: 7 },
-                  { header: "Src", width: 14 },
-                  { header: "Reason", width: 28 },
+                  `🕒 Time: ${formatLocalTime()}`,
+                  `📦 Total: ${summaryRows.length} | 🟢 Hold: ${holdCount} | 🔴 Exit: ${exitCount}`,
+                ],
+                [
+                  { header: "PAIR", width: 12 },
+                  { header: "ACT", width: 6 },
+                  { header: "SIG", width: 10 },
+                  { header: "CDL", width: 4 },
+                  { header: "SRC", width: 5 },
                 ],
                 summaryRows,
                 `Polling every ${config.pollIntervalMinutes}m`

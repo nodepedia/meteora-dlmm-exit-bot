@@ -76,6 +76,41 @@ export function formatTelegramTableMessage(title, columns, rows = [], footer = n
   return lines.join("\n");
 }
 
+export function formatTelegramReportMessage(title, metaLines = [], columns, rows = [], footer = null) {
+  const widths = columns.map((col, index) => {
+    const headerWidth = String(col.header).length;
+    const cellWidth = Math.max(0, ...rows.map((row) => String(row[index] ?? "").length));
+    return Math.min(col.width || Math.max(headerWidth, cellWidth), 24);
+  });
+
+  const header = columns.map((col, index) => pad(col.header, widths[index])).join(" | ");
+  const divider = widths.map((width) => "-".repeat(width)).join("-+-");
+  const body = rows.map((row) =>
+    row.map((cell, index) => pad(String(cell ?? ""), widths[index])).join(" | ")
+  );
+
+  const lines = [`<b>${escapeHtml(title)}</b>`];
+  for (const line of metaLines) {
+    if (!line) continue;
+    lines.push(escapeHtml(line));
+  }
+  lines.push("");
+  lines.push("<pre>");
+  lines.push(escapeHtml(header));
+  lines.push(escapeHtml(divider));
+  for (const line of body) {
+    lines.push(escapeHtml(line));
+  }
+  lines.push("</pre>");
+
+  if (footer) {
+    lines.push("");
+    lines.push(`<i>${escapeHtml(footer)}</i>`);
+  }
+
+  return lines.join("\n");
+}
+
 export async function sendTelegramMessage(text, { dedupeKey = null, dedupeMs = 120000 } = {}) {
   if (!isEnabled()) return { skipped: true, reason: "telegram_not_configured" };
 
