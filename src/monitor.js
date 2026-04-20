@@ -39,6 +39,8 @@ function compactSource(source) {
   if (source === "meteora") return "MTR";
   if (source === "meteora-partial") return "MTR-P";
   if (source === "meteora-cache") return "CACHE";
+  if (source === "birdeye") return "BRDY";
+  if (source === "birdeye-cache") return "B-CCH";
   return String(source).slice(0, 6).toUpperCase();
 }
 
@@ -59,7 +61,7 @@ async function maybeSwapToSol(baseMint) {
 async function processPosition(position) {
   log("info", `Evaluating ${position.pair} (${position.position})`);
 
-  const chart = await getPoolCandles({ poolAddress: position.pool });
+  const chart = await getPoolCandles({ poolAddress: position.pool, baseMint: position.baseMint });
   log("info", `${position.pair}: received ${chart.candles.length} candle(s) from ${chart.source}`);
   const decision = evaluateExitSignal(chart.candles, config.indicators);
 

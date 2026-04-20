@@ -9,13 +9,14 @@ export async function fetchJsonWithRetry(url, options = {}) {
     label = "request",
     retries = 3,
     retryDelayMs = 1200,
+    fetchOptions = {},
   } = options;
 
   let lastError = null;
 
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
-      const res = await fetch(url);
+      const res = await fetch(url, fetchOptions);
       if (!res.ok) {
         const body = await res.text().catch(() => "");
         throw new Error(`${label} failed: ${res.status} ${body}`);

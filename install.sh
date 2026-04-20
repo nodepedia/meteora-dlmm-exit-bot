@@ -76,10 +76,12 @@ HELIUS_API_KEY="$(prompt "HELIUS_API_KEY" "" true)"
 DRY_RUN="$(prompt "DRY_RUN" "true")"
 TIMEZONE="$(prompt "TIMEZONE" "Asia/Jakarta")"
 TIMEFRAME="$(prompt "TIMEFRAME" "1H")"
+CANDLE_SOURCE="$(prompt "CANDLE_SOURCE (meteora/birdeye)" "meteora")"
 POLL_INTERVAL_MINUTES="$(prompt "POLL_INTERVAL_MINUTES" "5")"
 EXIT_SWAP_TO_SOL="$(prompt "EXIT_SWAP_TO_SOL" "true")"
 TELEGRAM_BOT_TOKEN="$(prompt "TELEGRAM_BOT_TOKEN (optional, enter untuk kosong)" "" true)"
 TELEGRAM_CHAT_ID="$(prompt "TELEGRAM_CHAT_ID (optional, enter untuk kosong)" "")"
+BIRDEYE_API_KEY="$(prompt "BIRDEYE_API_KEY (optional, enter untuk kosong)" "" true)"
 JUPITER_API_KEY="$(prompt "JUPITER_API_KEY (optional, enter untuk kosong)" "" true)"
 
 if [[ -z "$WALLET_PRIVATE_KEY" || -z "$RPC_URL" || -z "$HELIUS_API_KEY" ]]; then
@@ -107,7 +109,7 @@ TIMEZONE=$TIMEZONE
 POLL_INTERVAL_MINUTES=$POLL_INTERVAL_MINUTES
 
 TIMEFRAME=$TIMEFRAME
-CANDLE_SOURCE=meteora
+CANDLE_SOURCE=$CANDLE_SOURCE
 BB_TOUCH_RULE=high_gte_upper_band
 MACD_GREEN_RULE=first_histogram_red_to_green
 EXIT_CLOSE_FULL=true
@@ -121,6 +123,7 @@ MACD_FAST=12
 MACD_SLOW=26
 MACD_SIGNAL=9
 
+BIRDEYE_API_KEY=$BIRDEYE_API_KEY
 JUPITER_API_KEY=$JUPITER_API_KEY
 EOF
 

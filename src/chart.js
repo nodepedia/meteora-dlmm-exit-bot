@@ -2,14 +2,24 @@ import { config } from "./config.js";
 import { fetchJsonWithRetry } from "./net.js";
 
 const METEORA_OHLCV_BASE = "https://dlmm.datapi.meteora.ag";
+const BIRDEYE_OHLCV_BASE = "https://public-api.birdeye.so/defi/ohlcv";
 const candleCache = new Map();
 const CANDLE_BUFFER = 10;
 
-function formatTimeframe(timeframe) {
+function formatMeteoraTimeframe(timeframe) {
   const normalized = String(timeframe || "1H").trim().toLowerCase();
   const supported = new Set(["5m", "30m", "1h", "2h", "4h", "12h", "24h"]);
   if (!supported.has(normalized)) {
     throw new Error(`Unsupported Meteora timeframe: ${timeframe}`);
+  }
+  return normalized;
+}
+
+function formatBirdeyeTimeframe(timeframe) {
+  const normalized = String(timeframe || "1H").trim().toLowerCase();
+  const supported = new Set(["1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "8h", "12h", "24h"]);
+  if (!supported.has(normalized)) {
+    throw new Error(`Unsupported Birdeye timeframe: ${timeframe}`);
   }
   return normalized;
 }
@@ -98,6 +108,26 @@ async function fetchWindow(poolAddress, timeframe, startTime, endTime) {
   return normalizeCandles(data.data || []);
 }
 
+async function fetchBirdeyeWindow(tokenAddress, timeframe, startTime, endTime) {
+  if (!config.candleProviders.birdeyeApiKey) {
+    throw new Error("BIRDEYE_API_KEY is required when CANDLE_SOURCE=birdeye");
+  }
+
+  const url = `${BIRDEYE_OHLCV_BASE}?address=${encodeURIComponent(tokenAddress)}&type=${encodeURIComponent(timeframe)}&time_from=${startTime}&time_to=${endTime}&currency=usd`;
+  const data = await fetchJsonWithRetry(url, {
+    label: `Birdeye OHLCV ${tokenAddress.slice(0, 8)} [${startTime}-${endTime}]`,
+    retries: 3,
+    retryDelayMs: 900,
+    fetchOptions: {
+      headers: {
+        "x-chain": "solana",
+        "X-API-KEY": config.candleProviders.birdeyeApiKey,
+      },
+    },
+  });
+  return normalizeCandles(data?.data?.items || data?.data || data?.items || []);
+}
+
 function mergeCandles(chunks) {
   const byTime = new Map();
   for (const chunk of chunks) {
@@ -109,7 +139,7 @@ function mergeCandles(chunks) {
 }
 
 async function getMeteoraPoolCandles(poolAddress) {
-  const timeframe = formatTimeframe(config.timeframe);
+  const timeframe = formatMeteoraTimeframe(config.timeframe);
   const endTime = Math.floor(Date.now() / 1000);
   const lookbackSeconds = resolveLookbackSeconds(timeframe);
   const chunkSeconds = resolveChunkSeconds(timeframe);
@@ -179,9 +209,51 @@ async function getMeteoraPoolCandles(poolAddress) {
   throw new Error(lastError?.message || "Meteora OHLCV request failed and no cache is available");
 }
 
-export async function getPoolCandles({ poolAddress }) {
-  if (config.candleSource !== "meteora") {
-    throw new Error(`Unsupported candle source: ${config.candleSource}`);
+async function getBirdeyeTokenCandles(tokenAddress) {
+  const timeframe = formatBirdeyeTimeframe(config.timeframe);
+  const endTime = Math.floor(Date.now() / 1000);
+  const lookbackSeconds = resolveLookbackSeconds(timeframe);
+  const startTime = endTime - lookbackSeconds;
+
+  const candles = await fetchBirdeyeWindow(tokenAddress, timeframe, startTime, endTime);
+  if (candles.length > 0) {
+    const minCandles = getMinimumCandlesRequired(config.indicators);
+    const targetCandles = minCandles + CANDLE_BUFFER;
+    const trimmed = candles.length > targetCandles ? candles.slice(-targetCandles) : candles;
+    candleCache.set(`birdeye:${tokenAddress}`, {
+      candles: trimmed,
+      cachedAt: Date.now(),
+      partial: false,
+    });
+    return {
+      source: "birdeye",
+      candles: trimmed,
+      partial: false,
+    };
   }
-  return getMeteoraPoolCandles(poolAddress);
+
+  const cached = candleCache.get(`birdeye:${tokenAddress}`);
+  if (cached?.candles?.length) {
+    return {
+      source: "birdeye-cache",
+      candles: cached.candles,
+      partial: true,
+      cachedAt: cached.cachedAt,
+    };
+  }
+
+  throw new Error("Birdeye OHLCV returned no candle data and no cache is available");
+}
+
+export async function getPoolCandles({ poolAddress, baseMint }) {
+  if (config.candleSource === "meteora") {
+    return getMeteoraPoolCandles(poolAddress);
+  }
+  if (config.candleSource === "birdeye") {
+    if (!baseMint) {
+      throw new Error("baseMint is required when CANDLE_SOURCE=birdeye");
+    }
+    return getBirdeyeTokenCandles(baseMint);
+  }
+  throw new Error(`Unsupported candle source: ${config.candleSource}`);
 }

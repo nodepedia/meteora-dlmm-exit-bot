@@ -76,7 +76,7 @@ Jika dua kondisi tersebut **tidak** terpenuhi, posisi tetap dibiarkan berjalan.
 Supaya implementasi tidak ambigu, bot akan memakai definisi berikut sebagai default:
 
 - **Timeframe**: `1H`
-- **Sumber candle**: Meteora OHLCV per pool
+- **Sumber candle**: configurable via `.env` (`meteora` atau `birdeye`)
 - **Touch upper band**: `high >= upper band`
 - **MACD green bar pertama**: histogram pertama yang berubah dari merah ke hijau
 - **Exit size**: close full position
@@ -131,6 +131,11 @@ EXIT_SWAP_TO_SOL=true
 POLL_INTERVAL_MINUTES=5
 ```
 
+Supported candle sources:
+
+- `meteora` → `5m`, `30m`, `1h`, `2h`, `4h`, `12h`, `24h`
+- `birdeye` → `1m`, `3m`, `5m`, `15m`, `30m`, `1h`, `2h`, `4h`, `6h`, `8h`, `12h`, `24h`
+
 Selain itu, bot nantinya juga akan membutuhkan konfigurasi seperti:
 
 ```env
@@ -151,6 +156,14 @@ TELEGRAM_NOTIFY_HOLD=false
 TELEGRAM_NOTIFY_ERRORS=true
 TELEGRAM_TIMEOUT_MS=15000
 TELEGRAM_RETRY_COUNT=1
+```
+
+Kalau kamu ingin memakai timeframe `15m`, gunakan source `birdeye`:
+
+```env
+TIMEFRAME=15m
+CANDLE_SOURCE=birdeye
+BIRDEYE_API_KEY=your_birdeye_api_key
 ```
 
 ---
@@ -259,6 +272,14 @@ MACD_GREEN_RULE=first_histogram_red_to_green
 EXIT_CLOSE_FULL=true
 EXIT_SWAP_TO_SOL=true
 POLL_INTERVAL_MINUTES=5
+```
+
+Contoh untuk setup `15m`:
+
+```env
+TIMEFRAME=15m
+CANDLE_SOURCE=birdeye
+BIRDEYE_API_KEY=your_birdeye_api_key
 ```
 
 Catatan:

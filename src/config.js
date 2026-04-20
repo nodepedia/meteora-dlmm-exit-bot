@@ -52,6 +52,9 @@ export const config = {
     timeoutMs: toNum(process.env.TELEGRAM_TIMEOUT_MS, 15000),
     retryCount: toNum(process.env.TELEGRAM_RETRY_COUNT, 1),
   },
+  candleProviders: {
+    birdeyeApiKey: process.env.BIRDEYE_API_KEY || "",
+  },
   tokens: {
     SOL: "So11111111111111111111111111111111111111112",
   },
