@@ -3,7 +3,7 @@ import { getPoolCandles } from "./chart.js";
 import { log } from "./logger.js";
 import { closePosition, getOpenPositions } from "./meteora.js";
 import { evaluateExitSignal } from "./strategy.js";
-import { formatTelegramMessage, sendTelegramMessage } from "./telegram.js";
+import { formatTelegramMessage, formatTelegramTableMessage, sendTelegramMessage } from "./telegram.js";
 import { getWalletBalances, swapToken } from "./wallet.js";
 
 function sleep(ms) {
@@ -33,17 +33,14 @@ async function processPosition(position) {
 
   if (!decision.exit) {
     log("info", `${position.pair}: hold (${decision.reason})`);
-    if (config.telegram.notifyHold) {
-      await sendTelegramMessage(
-        formatTelegramMessage("HOLD", [
-          { label: "Pair", value: position.pair },
-          { label: "Position", value: position.position, code: true },
-          { label: "Reason", value: decision.reason },
-        ], "Bot checked the latest candle and keeps the position open."),
-        { dedupeKey: `hold:${position.position}:${decision.reason}`, dedupeMs: 30 * 60 * 1000 }
-      );
-    }
-    return { action: "HOLD", reason: decision.reason };
+    return {
+      action: "HOLD",
+      reason: decision.reason,
+      pair: position.pair,
+      position: position.position,
+      candles: chart.candles.length,
+      source: chart.source,
+    };
   }
 
   log("info", `${position.pair}: exit triggered (${decision.reason})`);
@@ -99,9 +96,11 @@ export async function runMonitorLoop() {
         log("info", `No open DLMM positions. Sleeping ${config.pollIntervalMinutes} minute(s).`);
       } else {
         log("info", `Found ${positions.length} open position(s).`);
+        const cycleResults = [];
         for (const position of positions) {
           try {
-            await processPosition(position);
+            const result = await processPosition(position);
+            cycleResults.push(result);
           } catch (error) {
             log("error", `Failed processing ${position.position}: ${error.message}`);
             if (config.telegram.notifyErrors) {
@@ -114,6 +113,36 @@ export async function runMonitorLoop() {
                 { dedupeKey: `proc-error:${position.position}:${error.message}`, dedupeMs: 10 * 60 * 1000 }
               );
             }
+          }
+        }
+
+        if (config.telegram.notifyHold) {
+          const summaryRows = cycleResults
+            .filter((item) => item?.pair)
+            .map((item) => [
+              item.pair,
+              item.action,
+              item.candles ?? "-",
+              item.source ?? "-",
+              item.reason ?? "-",
+            ]);
+
+          if (summaryRows.length > 0) {
+            await sendTelegramMessage(
+              formatTelegramTableMessage(
+                "POSITION SUMMARY",
+                [
+                  { header: "Pair", width: 14 },
+                  { header: "Status", width: 8 },
+                  { header: "Candles", width: 7 },
+                  { header: "Src", width: 14 },
+                  { header: "Reason", width: 28 },
+                ],
+                summaryRows,
+                `Polling every ${config.pollIntervalMinutes}m`
+              ),
+              { dedupeKey: `summary:${summaryRows.map((row) => row.join("|")).join("||")}`, dedupeMs: 30 * 60 * 1000 }
+            );
           }
         }
       }
