@@ -34,6 +34,7 @@ export const config = {
   macdGreenRule: process.env.MACD_GREEN_RULE || "first_histogram_red_to_green",
   exitCloseFull: toBool(process.env.EXIT_CLOSE_FULL, true),
   exitSwapToSol: toBool(process.env.EXIT_SWAP_TO_SOL, true),
+  exitMinPositionAgeMinutes: toNum(process.env.EXIT_MIN_POSITION_AGE_MINUTES, 15),
   indicators: {
     bbPeriod: toNum(process.env.BB_PERIOD, 20),
     bbStdDev: toNum(process.env.BB_STDDEV, 2),

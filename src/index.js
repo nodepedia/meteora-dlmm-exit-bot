@@ -3,13 +3,14 @@ import { log } from "./logger.js";
 import { runMonitorLoop } from "./monitor.js";
 import { formatTelegramMessage, sendTelegramMessage } from "./telegram.js";
 
-log("info", `Starting DLMM Exit Bot | dryRun=${config.dryRun} | timeframe=${config.timeframe} | poll=${config.pollIntervalMinutes}m`);
+log("info", `Starting DLMM Exit Bot | dryRun=${config.dryRun} | timeframe=${config.timeframe} | poll=${config.pollIntervalMinutes}m | minAge=${config.exitMinPositionAgeMinutes}m`);
 if (config.telegram.notifyStartup) {
   sendTelegramMessage(
     formatTelegramMessage("DLMM Exit Bot Started", [
       { label: "Dry run", value: String(config.dryRun) },
       { label: "Timeframe", value: config.timeframe },
       { label: "Poll", value: `${config.pollIntervalMinutes}m` },
+      { label: "Min age", value: `${config.exitMinPositionAgeMinutes}m` },
       { label: "Timezone", value: config.timezone },
     ]),
     { dedupeKey: "startup", dedupeMs: 5 * 60 * 1000 }

@@ -13,6 +13,19 @@ const poolCache = new Map();
 let openPositionsCache = null;
 let openPositionsCacheAt = 0;
 
+function normalizeTimestamp(value) {
+  if (value == null || value === "") return null;
+  if (typeof value === "number") {
+    return value > 1e12 ? value : value * 1000;
+  }
+  const numeric = Number(value);
+  if (Number.isFinite(numeric) && numeric > 0) {
+    return numeric > 1e12 ? numeric : numeric * 1000;
+  }
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 async function getDLMM() {
   if (!_DLMM) {
     const mod = await import("@meteora-ag/dlmm");
@@ -86,6 +99,8 @@ export async function getOpenPositions() {
         lowerBin: pnlData.lowerBinId ?? null,
         upperBin: pnlData.upperBinId ?? null,
         activeBin: pnlData.poolActiveBinId ?? null,
+        createdAt: pnlData.createdAt ?? null,
+        openedAtMs: normalizeTimestamp(pnlData.createdAt),
       });
     }
   }

@@ -81,6 +81,7 @@ Supaya implementasi tidak ambigu, bot akan memakai definisi berikut sebagai defa
 - **MACD green bar pertama**: histogram pertama yang berubah dari merah ke hijau
 - **Exit size**: close full position
 - **Post-exit action**: hasil token langsung swap ke SOL
+- **Minimum position age before exit**: `15` menit
 
 ---
 
@@ -128,8 +129,16 @@ BB_TOUCH_RULE=high_gte_upper_band
 MACD_GREEN_RULE=first_histogram_red_to_green
 EXIT_CLOSE_FULL=true
 EXIT_SWAP_TO_SOL=true
+EXIT_MIN_POSITION_AGE_MINUTES=15
 POLL_INTERVAL_MINUTES=5
 ```
+
+Artinya:
+
+- jika posisi baru dibuka dan umurnya masih di bawah `EXIT_MIN_POSITION_AGE_MINUTES`
+- bot tetap boleh membaca indikator
+- tetapi bot **belum akan close**
+- setelah umur posisi melewati batas itu, barulah trigger exit boleh dieksekusi
 
 Supported candle sources:
 

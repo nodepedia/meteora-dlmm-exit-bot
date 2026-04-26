@@ -25,6 +25,7 @@ function formatLocalTime() {
 
 function compactReason(reason) {
   if (!reason) return "-";
+  if (/minimum position age/i.test(reason)) return "MIN_AGE";
   if (/not enough candles/i.test(reason)) return "WARMUP";
   if (/indicator warmup/i.test(reason)) return "WARMUP";
   if (/exit conditions not met/i.test(reason)) return "WAIT";
@@ -42,6 +43,11 @@ function compactSource(source) {
   if (source === "birdeye") return "BRDY";
   if (source === "birdeye-cache") return "B-CCH";
   return String(source).slice(0, 6).toUpperCase();
+}
+
+function getPositionAgeMinutes(position) {
+  if (!position?.openedAtMs || !Number.isFinite(position.openedAtMs)) return null;
+  return Math.max(0, Math.floor((Date.now() - position.openedAtMs) / 60000));
 }
 
 async function maybeSwapToSol(baseMint) {
@@ -64,6 +70,22 @@ async function processPosition(position) {
   const chart = await getPoolCandles({ poolAddress: position.pool, baseMint: position.baseMint });
   log("info", `${position.pair}: received ${chart.candles.length} candle(s) from ${chart.source}`);
   const decision = evaluateExitSignal(chart.candles, config.indicators);
+  const positionAgeMinutes = getPositionAgeMinutes(position);
+  const minAgeMinutes = Math.max(0, config.exitMinPositionAgeMinutes);
+
+  if (decision.exit && positionAgeMinutes != null && positionAgeMinutes < minAgeMinutes) {
+    const reason = `Minimum position age not reached (${positionAgeMinutes}/${minAgeMinutes}m)`;
+    log("info", `${position.pair}: hold (${reason})`);
+    return {
+      action: "HOLD",
+      reason,
+      pair: position.pair,
+      position: position.position,
+      candles: chart.candles.length,
+      source: chart.source,
+      positionAgeMinutes,
+    };
+  }
 
   if (!decision.exit) {
     log("info", `${position.pair}: hold (${decision.reason})`);
@@ -74,6 +96,7 @@ async function processPosition(position) {
       position: position.position,
       candles: chart.candles.length,
       source: chart.source,
+      positionAgeMinutes,
     };
   }
 
@@ -116,7 +139,7 @@ async function processPosition(position) {
     }
   }
 
-  return { action: "EXIT", reason: decision.reason, closeResult, swapResult };
+  return { action: "EXIT", reason: decision.reason, closeResult, swapResult, positionAgeMinutes };
 }
 
 export async function runMonitorLoop() {
